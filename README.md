@@ -81,8 +81,13 @@ O mesmo código aparece na janela de preview. Para encerrar, pressione `q` na ja
 
 ## Detecção de gesto
 
-- Keypoints utilizados: ombros (5, 6) e pulsos (9, 10) — formato COCO
-- Condição: `pulso.y < ombro.y` para **ambos** os braços simultaneamente
+- Gesto: **X com os antebraços** (na frente do peito ou acima da cabeça)
+- Keypoints utilizados: ombros (5, 6), cotovelos (7, 8) e pulsos (9, 10) — formato COCO
+- Condições (todas ao mesmo tempo):
+  - pulsos cruzados: cada pulso está do lado oposto ao seu ombro
+  - cotovelos **não** cruzados (assim os antebraços se cruzam formando o X)
+  - pulsos acima dos cotovelos (`pulso.y < cotovelo.y`)
+- Funciona com o jogador de frente ou de costas para a câmera; jogadores de lado são ignorados
 - Tempo mínimo sustentado: **2 segundos**
 - Cooldown entre detecções: **5 segundos**
 

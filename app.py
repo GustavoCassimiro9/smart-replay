@@ -91,7 +91,7 @@ def gesture_detection() -> None:
                 last_trigger_time = current_time
                 hands_raised_since = None  # reset so it needs 2s again next time
                 play_sound(SOUND_REPLAY)
-                print(f"Mãos levantadas detectadas (jogadores: {players_raised})! Salvando vídeo...")
+                print(f"Gesto X detectado (jogadores: {players_raised})! Salvando vídeo...")
 
                 thumbnail_base64 = frame_to_base64(frame)
                 save_path = save_video_with_watermark(cap.fps)

@@ -3,7 +3,7 @@ import threading
 import queue
 import numpy as np
 from ultralytics import YOLO
-from camera.pose_utils import has_both_hands_raised
+from camera.pose_utils import has_arms_crossed_x
 
 # ---------------------------------------------------------------------------
 # Singleton model — loaded once, reused forever
@@ -128,7 +128,7 @@ class PoseDetector:
                 kps_all = result.keypoints.data.cpu().numpy()
 
                 for person_idx, kps in enumerate(kps_all):
-                    if has_both_hands_raised(kps):
+                    if has_arms_crossed_x(kps):
                         raised.append(person_idx)
 
             with self._result_lock:
