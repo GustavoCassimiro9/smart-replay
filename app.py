@@ -11,12 +11,17 @@ import pygame
 
 from camera.camera import VideoCapture
 from camera.detector import PoseDetector
-from processing.bufferManager import add_frame_to_buffer, get_buffer_frames
-from processing.videoSaver import save_video_with_watermark
+from processing.bufferManager import add_frame_to_buffer, decode_frame, get_buffer_frames
+from processing.videoSaver import save_video_with_watermark, select_clip_frames
+from config import (
+    GESTURE_COOLDOWN_SECONDS,
+    GESTURE_HOLD_SECONDS,
+    GESTURE_MARGIN_SECONDS,
+    GESTURE_RELEASE_SECONDS,
+)
 from server.services.partidas_service import salvar_partida, salvar_video, finalizar_partida
 import server.server as server
 
-COOLDOWN_PERIOD = 5  # segundos mínimos entre dois disparos do gesto
 SESSION_DURATION = 6000  # segundos até a partida ser encerrada automaticamente (~100 min)
 SOUND_REPLAY = "static/replay.mp3"
 SOUND_START  = "static/start.mp3"
@@ -70,9 +75,22 @@ def preview_frame(frame, codigo: str, players: list[int]):
     return out
 
 
-def save_replay(partida_id, frames, fps: float, thumbnail_base64: str) -> None:
-    """Codifica o clipe e registra no banco (roda em uma thread em segundo plano)."""
-    save_path = save_video_with_watermark(fps, frames)
+def save_replay(partida_id, frames, fps: float, gesture_started_at: float) -> None:
+    """
+    Codifica o clipe e registra no banco (roda em uma thread em segundo plano).
+
+    O clipe termina GESTURE_MARGIN_SECONDS antes do X ter sido reconhecido pela
+    primeira vez, para não aparecer o jogador levantando e cruzando os braços.
+    """
+    clip = select_clip_frames(frames, gesture_started_at - GESTURE_MARGIN_SECONDS, fps)
+    if not clip:
+        print("Sem frames antes do gesto. Nenhum vídeo para salvar.")
+        return
+
+    # Miniatura: um frame do meio do clipe (o frame do disparo mostraria o gesto)
+    thumbnail_base64 = frame_to_base64(decode_frame(clip[len(clip) // 2]))
+
+    save_path = save_video_with_watermark(fps, clip)
     if save_path:
         print(f"Vídeo salvo: {save_path}")
         salvar_video(partida_id, save_path, thumbnail_base64, datetime.datetime.now())
@@ -99,8 +117,11 @@ def gesture_detection() -> None:
 
     start_time = time.time()
     last_trigger_time = 0.0
-    hands_raised_since: float | None = None  # instante em que o gesto começou
-    SUSTAINED_SECONDS = 2.0
+    # Estado do gesto. Um "episódio" é o período em que o X está sendo feito,
+    # tolerando falhas curtas da detecção (o modelo às vezes perde o X por um instante).
+    gesture_started_at: float | None = None  # quando o X apareceu no episódio atual
+    gesture_last_seen = 0.0  # última vez em que o X foi detectado
+    gesture_triggered = False  # o episódio atual já gerou um replay?
     frame_count = 0
     pending_saves: list[threading.Thread] = []
 
@@ -121,27 +142,31 @@ def gesture_detection() -> None:
             players_raised = detector.get_result()
             current_time = time.time()
 
+            released = current_time - gesture_last_seen > GESTURE_RELEASE_SECONDS
             if players_raised:
-                if hands_raised_since is None:
-                    hands_raised_since = current_time  # começa a contar o tempo
-            else:
-                hands_raised_since = None  # zera se o gesto parar
+                if gesture_started_at is None or released:
+                    gesture_started_at = current_time  # começa um novo episódio
+                    gesture_triggered = False
+                gesture_last_seen = current_time
+            elif gesture_started_at is not None and released:
+                gesture_started_at = None  # X desfeito de verdade (não foi só uma falha)
 
             sustained = (
-                hands_raised_since is not None
-                and (current_time - hands_raised_since) >= SUSTAINED_SECONDS
+                gesture_started_at is not None
+                and not gesture_triggered  # um X segurado gera um replay só
+                and (current_time - gesture_started_at) >= GESTURE_HOLD_SECONDS
             )
 
-            if sustained and (current_time - last_trigger_time) > COOLDOWN_PERIOD:
+            if sustained and (current_time - last_trigger_time) > GESTURE_COOLDOWN_SECONDS:
+                gesture_triggered = True
                 last_trigger_time = current_time
-                hands_raised_since = None  # zera para exigir mais 2 s no próximo disparo
                 play_sound(SOUND_REPLAY)
                 print(f"Gesto X detectado (jogadores: {players_raised})! Salvando vídeo...")
 
                 # Copia o buffer agora; a codificação roda em segundo plano para a detecção continuar
                 saver = threading.Thread(
                     target=save_replay,
-                    args=(partida_id, get_buffer_frames(), cap.fps, frame_to_base64(frame)),
+                    args=(partida_id, get_buffer_frames(), cap.fps, gesture_started_at),
                     name="ReplaySaver",
                 )
                 saver.start()

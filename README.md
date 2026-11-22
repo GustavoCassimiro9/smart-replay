@@ -105,6 +105,10 @@ O mesmo código aparece na janela de preview. Para encerrar, pressione `q` na ja
 - Funciona com o jogador de frente ou de costas para a câmera; jogadores de lado são ignorados
 - Tempo mínimo sustentado: **2 segundos**
 - Cooldown entre detecções: **5 segundos**
+- Falhas curtas da detecção (até **0,7 s**) não interrompem o gesto: o modelo às vezes perde o X por um instante
+- Um X segurado gera **um replay só**; para disparar outro, é preciso desfazer o X
+- **Sem rastro do gesto no clipe:** o replay termina **1 s antes do momento em que o X apareceu**, então não aparece o jogador levantando e cruzando os braços. A miniatura usa um frame do meio do clipe.
+- Tudo configurável em `config.py` (`GESTURE_HOLD_SECONDS`, `GESTURE_MARGIN_SECONDS`, `GESTURE_RELEASE_SECONDS`, `GESTURE_COOLDOWN_SECONDS`)
 
 ## API
 

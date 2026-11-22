@@ -6,12 +6,25 @@ import uuid
 import cv2
 import numpy as np
 
-from config import VIDEO_PATH, WATERMARK_PATH, GESTURE_TRIM_SECONDS
+from config import VIDEO_PATH, WATERMARK_PATH, CLIP_SECONDS
 from processing.bufferManager import decode_frame
 
 # H.264 pelo ffmpeg abre em navegadores e celulares; o "mp4v" do próprio OpenCV
 # (usado quando o ffmpeg não está instalado) gera arquivos maiores e não abre no navegador.
 FFMPEG = shutil.which("ffmpeg")
+
+
+def select_clip_frames(frames, end_time: float, fps: float):
+    """
+    Escolhe os frames do clipe: os últimos CLIP_SECONDS antes de `end_time`.
+
+    `frames` é a cópia do buffer (lista de (horário, jpg)). `end_time` é o
+    instante em que o clipe deve terminar — antes do jogador começar o gesto —,
+    então nada do movimento do X entra no replay.
+    Retorna a lista de jpgs, em ordem.
+    """
+    before = [jpg for t, jpg in frames if t < end_time]
+    return before[-int(round(fps * CLIP_SECONDS)):]
 
 
 def generate_new_path_name():
@@ -86,17 +99,12 @@ def save_video_with_watermark(fps, frames):
     """
     Exporta um clipe de replay com a marca d'água.
 
-    `frames` é uma cópia do buffer, em JPEG, vinda de bufferManager.get_buffer_frames().
-    Os últimos GESTURE_TRIM_SECONDS são descartados para o clipe não terminar no gesto.
+    `frames` são os jpgs já escolhidos por select_clip_frames().
     Retorna o nome do arquivo dentro de VIDEO_PATH, ou None se der erro.
     """
     if not frames:
         print("Buffer vazio. Nenhum vídeo para salvar.")
         return None
-
-    trim = int(fps * GESTURE_TRIM_SECONDS)
-    if len(frames) > trim:
-        frames = frames[:-trim]
 
     first = decode_frame(frames[0])
     frame_height, frame_width = first.shape[:2]
