@@ -1,15 +1,13 @@
 from sqlalchemy import create_engine, Column, String, UUID, TIMESTAMP, func, Boolean, Integer
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
+import os
 import uuid
 
-# Configuração do banco de dados
-DATABASE_URL = "postgresql://{user}:{password}@{host}:{port}/{db}".format(
-    user="teste",
-    password="teste%40123",
-    host="localhost",
-    port="5432",
-    db="instaplay"
+# Configuração do banco de dados (no Docker vem da variável DATABASE_URL)
+DATABASE_URL = os.environ.get(
+    "DATABASE_URL",
+    "postgresql+psycopg2://teste:teste%40123@localhost:5432/instaplay",
 )
 
 engine = create_engine(

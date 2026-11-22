@@ -1,6 +1,10 @@
 *.mp4
 
-# Ignore python caches
+# Caches do Python
 *.pyc
 __pycache__/
 env
+# Ferramentas locais (ambiente da webcam, PID e configuração)
+.venv-webcam/
+.webcam.pid
+.env

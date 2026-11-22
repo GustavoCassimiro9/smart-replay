@@ -6,11 +6,12 @@ from config import POSE_MODEL, POSE_MODEL_URLS, POSE_INPUT_SIZE, POSE_RUNTIME
 from camera.pose_utils import has_arms_crossed_x
 
 # ---------------------------------------------------------------------------
-# Singleton model — loaded once, reused forever
+# Modelo único (singleton) — carregado uma vez e reaproveitado
 # ---------------------------------------------------------------------------
-# RTMO (OpenMMLab, Apache-2.0): one-stage multi-person pose estimation, run
-# through rtmlib + ONNX Runtime. One pass finds every person in the frame, so
-# the cost barely changes with the number of players on court.
+# RTMO (OpenMMLab, Apache-2.0): estimativa de pose de várias pessoas em uma
+# única etapa, executado pelo rtmlib + ONNX Runtime. Uma passada encontra
+# todas as pessoas do frame, então o custo quase não muda com o número de
+# jogadores em quadra.
 
 _model = None
 _model_lock = threading.Lock()
@@ -20,10 +21,10 @@ def _get_model():
     global _model
     if _model is None:
         with _model_lock:
-            if _model is None:  # double-checked locking
+            if _model is None:  # verificação dupla, para carregar uma vez só entre threads
                 from rtmlib import RTMO
 
-                # Downloaded on first use to ~/.cache/rtmlib
+                # Baixado no primeiro uso para ~/.cache/rtmlib
                 _model = RTMO(
                     POSE_MODEL_URLS[POSE_MODEL],
                     model_input_size=POSE_INPUT_SIZE,
@@ -34,11 +35,11 @@ def _get_model():
 
 
 # ---------------------------------------------------------------------------
-# Helpers
+# Funções auxiliares
 # ---------------------------------------------------------------------------
 
 def _resize_for_inference(frame: np.ndarray, width: int = 640) -> np.ndarray:
-    """Downscale frame to `width` pixels wide (aspect ratio preserved)."""
+    """Reduz o frame para `width` pixels de largura (mantendo a proporção)."""
     h, w = frame.shape[:2]
     if w == width:
         return frame
@@ -48,12 +49,12 @@ def _resize_for_inference(frame: np.ndarray, width: int = 640) -> np.ndarray:
 
 def _detect_people(model, frame: np.ndarray) -> np.ndarray:
     """
-    Run RTMO and return keypoints as (N_persons, 17, 3) — columns x, y,
-    confidence — in COCO order, the format pose_utils expects.
+    Roda o RTMO e retorna os pontos no formato (N_pessoas, 17, 3) — colunas
+    x, y, confiança — na ordem COCO, que é o formato esperado pelo pose_utils.
     """
     keypoints, scores = model(frame)  # (N, 17, 2), (N, 17)
     people = np.concatenate([keypoints, scores[..., None]], axis=-1)
-    # rtmlib returns a single all-zero "person" when nobody is detected
+    # O rtmlib devolve uma única "pessoa" toda zerada quando ninguém é detectado
     return people[scores.max(axis=1) > 0]
 
 
@@ -63,13 +64,13 @@ def _detect_people(model, frame: np.ndarray) -> np.ndarray:
 
 class PoseDetector:
     """
-    Runs RTMO pose inference in a background thread.
+    Roda a inferência de pose do RTMO em uma thread em segundo plano.
 
-    Usage
-    -----
+    Uso
+    ---
     detector = PoseDetector()
-    detector.submit(frame)          # non-blocking — drop frame if busy
-    players = detector.get_result() # list of person indices making the X gesture
+    detector.submit(frame)          # não bloqueia — descarta o frame se estiver ocupado
+    players = detector.get_result() # índices das pessoas fazendo o gesto X
     detector.stop()
     """
 
@@ -78,7 +79,7 @@ class PoseDetector:
         self._inference_width = inference_width
         self._skip_frames = skip_frames
 
-        # Single-slot queue — we only care about the *latest* frame
+        # Fila de uma posição — só interessa o frame *mais recente*
         self._frame_queue: queue.Queue = queue.Queue(maxsize=1)
         self._result: list[int] = []
         self._result_lock = threading.Lock()
@@ -91,19 +92,19 @@ class PoseDetector:
         self._thread.start()
 
     # ------------------------------------------------------------------
-    # Public API
+    # API pública
     # ------------------------------------------------------------------
 
     def submit(self, frame: np.ndarray) -> None:
         """
-        Send a frame for pose inference.
-        Frames are skipped according to `skip_frames` to reduce CPU load.
-        If the inference thread is still busy the frame is silently dropped.
+        Envia um frame para a inferência de pose.
+        Pula frames conforme `skip_frames` para reduzir o uso de CPU.
+        Se a thread de inferência ainda estiver ocupada, o frame é descartado.
         """
         self._frame_counter += 1
         if self._frame_counter % self._skip_frames != 0:
             return
-        # Replace any pending frame — always keep the newest
+        # Substitui qualquer frame pendente — mantém sempre o mais novo
         if self._frame_queue.full():
             try:
                 self._frame_queue.get_nowait()
@@ -113,19 +114,19 @@ class PoseDetector:
 
     def get_result(self) -> list[int]:
         """
-        Return the list of person indices (0-based) making the X gesture.
-        Non-blocking — returns the last computed result immediately.
+        Retorna a lista de índices (a partir de 0) das pessoas fazendo o gesto X.
+        Não bloqueia — devolve na hora o último resultado calculado.
         """
         with self._result_lock:
             return list(self._result)
 
     def stop(self) -> None:
-        """Signal the inference thread to exit and wait for it."""
+        """Sinaliza para a thread de inferência terminar e espera por ela."""
         self._stop.set()
         self._thread.join(timeout=2.0)
 
     # ------------------------------------------------------------------
-    # Background inference loop
+    # Loop de inferência em segundo plano
     # ------------------------------------------------------------------
 
     def _inference_loop(self) -> None:

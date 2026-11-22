@@ -1,4 +1,4 @@
-# Keypoint indices — COCO format used by YOLOv8 pose
+# Índices dos pontos do corpo — formato COCO (17 pontos), usado pelo RTMO
 LEFT_SHOULDER = 5
 RIGHT_SHOULDER = 6
 LEFT_ELBOW = 7
@@ -6,20 +6,20 @@ RIGHT_ELBOW = 8
 LEFT_WRIST = 9
 RIGHT_WRIST = 10
 
-CONF_THRESHOLD = 0.4  # minimum keypoint confidence to trust a coordinate
-MIN_SHOULDER_WIDTH_PX = 10  # below this the person is sideways and left/right is unreliable
+CONF_THRESHOLD = 0.4  # confiança mínima de um ponto para confiar na coordenada
+MIN_SHOULDER_WIDTH_PX = 10  # abaixo disso a pessoa está de lado e esquerda/direita não é confiável
 
 
 def has_both_hands_raised(keypoints) -> bool:
     """
-    Determine whether a single person has both hands raised.
+    Verifica se uma pessoa está com as duas mãos levantadas (gesto antigo).
 
     Args:
-        keypoints: numpy array of shape (17, 3) — columns are (x, y, confidence).
+        keypoints: array numpy de formato (17, 3) — colunas (x, y, confiança).
 
     Returns:
-        True if both wrists are above (lower y value than) their respective
-        shoulders and all four keypoints are detected with enough confidence.
+        True se os dois pulsos estão acima (y menor) dos respectivos ombros
+        e os quatro pontos foram detectados com confiança suficiente.
     """
     if len(keypoints) <= max(LEFT_WRIST, RIGHT_WRIST, LEFT_SHOULDER, RIGHT_SHOULDER):
         return False
@@ -29,11 +29,11 @@ def has_both_hands_raised(keypoints) -> bool:
     ls_x, ls_y, ls_c = keypoints[LEFT_SHOULDER]
     rs_x, rs_y, rs_c = keypoints[RIGHT_SHOULDER]
 
-    # Reject if any relevant keypoint is below the confidence threshold
+    # Descarta se algum ponto relevante estiver abaixo da confiança mínima
     if min(lw_c, rw_c, ls_c, rs_c) < CONF_THRESHOLD:
         return False
 
-    # Image y-axis points downward: a raised hand has a smaller y than the shoulder
+    # O eixo y da imagem cresce para baixo: mão levantada tem y menor que o ombro
     left_raised = lw_y < ls_y
     right_raised = rw_y < rs_y
 
@@ -42,22 +42,22 @@ def has_both_hands_raised(keypoints) -> bool:
 
 def has_arms_crossed_x(keypoints) -> bool:
     """
-    Determine whether a single person is making an "X" with the forearms.
+    Verifica se uma pessoa está fazendo um "X" com os antebraços.
 
-    The X is detected when:
-      1. The wrists are crossed: each wrist is on the opposite side of the
-         body from its own shoulder (left wrist past the right wrist).
-      2. The elbows are NOT crossed (keep the normal shoulder order). Together
-         with (1) this means the forearms intersect, forming the X.
-      3. Both wrists are above their elbows (forearms pointing up), which
-         covers an X in front of the chest or above the head and rejects
-         arms simply folded at the waist.
+    O X é detectado quando:
+      1. Os pulsos estão cruzados: cada pulso está do lado oposto do corpo
+         em relação ao seu próprio ombro (pulso esquerdo além do direito).
+      2. Os cotovelos NÃO estão cruzados (mantêm a ordem normal dos ombros).
+         Junto com (1), isso significa que os antebraços se cruzam, formando o X.
+      3. Os dois pulsos estão acima dos cotovelos (antebraços para cima), o que
+         cobre o X na frente do peito ou acima da cabeça e descarta braços
+         simplesmente cruzados na cintura.
 
-    Comparing against the shoulder order (instead of a fixed "x is smaller")
-    makes it work whether the player faces the camera or has their back to it.
+    Comparar com a ordem dos ombros (em vez de um "x menor" fixo) faz a regra
+    funcionar com o jogador de frente ou de costas para a câmera.
 
     Args:
-        keypoints: numpy array of shape (17, 3) — columns are (x, y, confidence).
+        keypoints: array numpy de formato (17, 3) — colunas (x, y, confiança).
     """
     needed = (LEFT_SHOULDER, RIGHT_SHOULDER, LEFT_ELBOW, RIGHT_ELBOW, LEFT_WRIST, RIGHT_WRIST)
     if len(keypoints) <= max(needed):
@@ -73,11 +73,11 @@ def has_arms_crossed_x(keypoints) -> bool:
     if min(ls_c, rs_c, le_c, re_c, lw_c, rw_c) < CONF_THRESHOLD:
         return False
 
-    # Side-on players: left/right order of the shoulders can't be trusted
+    # Jogador de lado: não dá para confiar na ordem esquerda/direita dos ombros
     shoulder_dx = ls_x - rs_x
     if abs(shoulder_dx) < MIN_SHOULDER_WIDTH_PX:
         return False
-    body_side = 1 if shoulder_dx > 0 else -1  # +1 when facing the camera
+    body_side = 1 if shoulder_dx > 0 else -1  # +1 quando está de frente para a câmera
 
     wrists_crossed = (lw_x - rw_x) * body_side < 0
     elbows_normal = (le_x - re_x) * body_side > 0

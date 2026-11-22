@@ -1,0 +1,10 @@
+.git/
+.vscode/
+.venv-webcam/
+env/
+__pycache__/
+*.pyc
+static/videos/
+tools/
+*.ps1
+*.bat

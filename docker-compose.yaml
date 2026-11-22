@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   postgres:
     image: postgres:15
@@ -14,6 +12,28 @@ services:
     volumes:
       - db_data:/var/lib/postgresql/data
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql # Montar o script SQL dentro do container
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U teste -d instaplay"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  app:
+    build: .
+    image: smart-replay
+    container_name: smart_replay
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - '5000:5000'
+    environment:
+      DATABASE_URL: postgresql+psycopg2://teste:teste%40123@postgres:5432/instaplay
+      # Webcam via tools/webcam_server.py (padrão) ou URL de câmera IP / DroidCam (defina no arquivo .env)
+      CAMERA_SOURCE: ${CAMERA_SOURCE:-http://host.docker.internal:8090/video}
+      CAMERA_FPS: ${CAMERA_FPS:-30}
+    volumes:
+      - ./static/videos:/app/static/videos # clipes salvos ficam na pasta do projeto
 
 volumes:
   db_data:

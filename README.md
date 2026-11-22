@@ -93,7 +93,10 @@ O mesmo código aparece na janela de preview. Para encerrar, pressione `q` na ja
 
 ## Detecção de gesto
 
-- Gesto: **X com os antebraços** (na frente do peito ou acima da cabeça)
+- Gesto: **X com os antebraços na frente do peito** (recomendado), mantido por 2 segundos
+  - A regra também aceita o X acima da cabeça, mas a detecção é menos estável: os braços tampam o rosto, os pulsos podem sair do enquadramento e o modelo fica menos confiante nos pontos dos braços
+  - Para os jogadores, a instrução sugerida é: *"Cruze os braços em X no peito por 2 segundos para salvar o replay"*
+  - O jogador precisa aparecer pelo menos da cintura para cima, com as mãos visíveis
 - Keypoints utilizados: ombros (5, 6), cotovelos (7, 8) e pulsos (9, 10) — formato COCO
 - Condições (todas ao mesmo tempo):
   - pulsos cruzados: cada pulso está do lado oposto ao seu ombro
@@ -155,3 +158,6 @@ GET /partida/video/<filename>
 | `skip_frames=2` | Inferência a cada 2 frames |
 | Thread de captura separada | Câmera nunca bloqueia o loop principal |
 | Fila de 1 slot no detector | Sempre processa o frame mais recente |
+| Buffer com frames em JPEG | 32 s de vídeo ocupam ~100–200 MB em vez de ~2,6 GB (720p) |
+| Gravação do clipe em thread separada | A detecção continua enquanto o replay é codificado |
+| Clipes em H.264 (ffmpeg) | Arquivos menores, que abrem no navegador e no celular; sem ffmpeg, cai para `mp4v` |
