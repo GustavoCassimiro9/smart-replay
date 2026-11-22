@@ -1,8 +1,8 @@
 # config.py
 FPS = 30  # Frames por segundo
-CLIP_SECONDS = 30  # Duração do replay salvo
+CLIP_SECONDS = 15  # Duração do replay salvo
 GESTURE_TRIM_SECONDS = 2  # Segundos finais descartados (o próprio gesto X)
-BUFFER_SIZE = FPS * (CLIP_SECONDS + GESTURE_TRIM_SECONDS)  # 32 s no buffer -> clipe de 30 s
+BUFFER_SIZE = FPS * (CLIP_SECONDS + GESTURE_TRIM_SECONDS)  # 17 s no buffer -> clipe de 15 s
 BUFFER_JPEG_QUALITY = 90  # Frames ficam em JPEG no buffer (~20x menos memória que sem compressão)
 VIDEO_RESOLUTION = (1280, 720)  # Resolução do vídeo
 VIDEO_PATH = "static/videos/"

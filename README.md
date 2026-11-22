@@ -1,6 +1,6 @@
 # Instaplay
 
-Sistema de detecção de gestos em tempo real para jogos multiplayer. Quando um jogador faz um **X com os antebraços** por 2 segundos, o sistema salva automaticamente os últimos 30 segundos de vídeo com marca d'água e registra no banco de dados.
+Sistema de detecção de gestos em tempo real para jogos multiplayer. Quando um jogador faz um **X com os antebraços** por 2 segundos, o sistema salva automaticamente os últimos 15 segundos de vídeo com marca d'água e registra no banco de dados.
 
 ## Como funciona
 
@@ -21,7 +21,7 @@ instaplay/
 │   ├── detector.py             # Inferência RTMO em thread dedicada
 │   └── pose_utils.py           # Regra do gesto X
 ├── processing/
-│   ├── bufferManager.py        # Buffer circular de 30 segundos
+│   ├── bufferManager.py        # Buffer circular (17 s, em JPEG)
 │   └── videoSaver.py           # Exporta vídeo do buffer com marca d'água
 ├── server/
 │   ├── server.py               # API Flask
@@ -158,6 +158,6 @@ GET /partida/video/<filename>
 | `skip_frames=2` | Inferência a cada 2 frames |
 | Thread de captura separada | Câmera nunca bloqueia o loop principal |
 | Fila de 1 slot no detector | Sempre processa o frame mais recente |
-| Buffer com frames em JPEG | 32 s de vídeo ocupam ~100–200 MB em vez de ~2,6 GB (720p) |
+| Buffer com frames em JPEG | 17 s de vídeo ocupam ~50–100 MB em vez de ~1,4 GB (720p) |
 | Gravação do clipe em thread separada | A detecção continua enquanto o replay é codificado |
 | Clipes em H.264 (ffmpeg) | Arquivos menores, que abrem no navegador e no celular; sem ffmpeg, cai para `mp4v` |
