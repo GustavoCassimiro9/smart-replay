@@ -1,12 +1,12 @@
 # Instaplay
 
-Sistema de detecção de gestos em tempo real para jogos multiplayer. Quando um ou mais jogadores levantam os dois braços por 2 segundos, o sistema salva automaticamente os últimos 30 segundos de vídeo com marca d'água e registra no banco de dados.
+Sistema de detecção de gestos em tempo real para jogos multiplayer. Quando um jogador faz um **X com os antebraços** por 2 segundos, o sistema salva automaticamente os últimos 30 segundos de vídeo com marca d'água e registra no banco de dados.
 
 ## Como funciona
 
 1. A câmera captura o vídeo continuamente em uma thread dedicada
-2. YOLOv8 detecta a pose de todas as pessoas no frame em outra thread
-3. Quando alguém mantém **os dois braços levantados por 2 segundos**, o gesto é confirmado
+2. O modelo **RTMO** detecta a pose de todas as pessoas no frame em outra thread
+3. Quando alguém mantém **o X com os antebraços por 2 segundos**, o gesto é confirmado
 4. O sistema toca um som, salva o clipe e registra no banco
 5. A API Flask permite buscar os vídeos pelo código da partida
 
@@ -18,8 +18,8 @@ instaplay/
 ├── config.py                   # Constantes (FPS, buffer, resolução, paths)
 ├── camera/
 │   ├── camera.py               # Captura de vídeo em thread dedicada
-│   ├── detector.py             # Inferência YOLOv8 em thread dedicada
-│   └── pose_utils.py           # Lógica de detecção de braços levantados
+│   ├── detector.py             # Inferência RTMO em thread dedicada
+│   └── pose_utils.py           # Regra do gesto X
 ├── processing/
 │   ├── bufferManager.py        # Buffer circular de 30 segundos
 │   └── videoSaver.py           # Exporta vídeo do buffer com marca d'água
@@ -53,7 +53,19 @@ docker-compose up -d
 pip install -r requirements.txt
 ```
 
-Na primeira execução o modelo YOLOv8 (~6 MB) é baixado automaticamente.
+Na primeira execução o modelo RTMO-s (~35 MB) é baixado automaticamente para `~/.cache/rtmlib`.
+
+## Modelo de pose
+
+O sistema usa o **RTMO** ([artigo, CVPR 2024](https://arxiv.org/abs/2312.07526)), da OpenMMLab, executado pelo [`rtmlib`](https://github.com/Tau-J/rtmlib) com ONNX Runtime (sem PyTorch).
+
+- **Uma única etapa**: detecta todas as pessoas numa só passada, então o custo quase não muda com o número de jogadores
+- **17 pontos no formato COCO**, os mesmos que a regra do gesto usa
+- Configurável em `config.py`: `POSE_MODEL` (`rtmo-s`, `rtmo-m` ou `rtmo-l`) e `POSE_RUNTIME` (`onnxruntime` ou `openvino`)
+
+**Por que RTMO e não YOLOv8-pose:** num teste com o mesmo vídeo de webcam, o YOLOv8 (nano e small) perdia um dos braços quando os antebraços se cruzavam e não detectou nenhum gesto X; o RTMO detectou os dois braços e disparou o replay. A comparação foi feita com o projeto [pose-benchmark](../pose-benchmark).
+
+**Licença:** o código do RTMO e do `rtmlib` é Apache-2.0 (permite uso comercial). Os pesos pré-treinados usados foram treinados no conjunto "body7" (7 datasets combinados), e alguns desses datasets podem ter licença apenas para pesquisa. **Antes de comercializar, confirme a licença dos pesos** ou use pesos treinados só no COCO.
 
 ## Configuração da câmera
 
@@ -138,7 +150,7 @@ GET /partida/video/<filename>
 
 | Técnica | Efeito |
 |---|---|
-| `yolov8n-pose` (nano) | Modelo mais leve da família YOLOv8 |
+| `rtmo-s` via ONNX Runtime | Modelo mais leve da família RTMO, sem PyTorch |
 | Resize para 640px antes da inferência | Reduz custo ~4× vs resolução original |
 | `skip_frames=2` | Inferência a cada 2 frames |
 | Thread de captura separada | Câmera nunca bloqueia o loop principal |

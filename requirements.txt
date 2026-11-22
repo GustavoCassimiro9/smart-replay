@@ -1,5 +1,6 @@
 opencv-python
-ultralytics
+rtmlib==0.0.16
+onnxruntime
 flask
 flask-cors
 sqlalchemy

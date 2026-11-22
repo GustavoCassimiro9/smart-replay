@@ -1,24 +1,35 @@
-import cv2
 import threading
 import queue
+import cv2
 import numpy as np
-from ultralytics import YOLO
+from config import POSE_MODEL, POSE_MODEL_URLS, POSE_INPUT_SIZE, POSE_RUNTIME
 from camera.pose_utils import has_arms_crossed_x
 
 # ---------------------------------------------------------------------------
 # Singleton model — loaded once, reused forever
 # ---------------------------------------------------------------------------
+# RTMO (OpenMMLab, Apache-2.0): one-stage multi-person pose estimation, run
+# through rtmlib + ONNX Runtime. One pass finds every person in the frame, so
+# the cost barely changes with the number of players on court.
 
-_model: YOLO | None = None
+_model = None
 _model_lock = threading.Lock()
 
 
-def _get_model() -> YOLO:
+def _get_model():
     global _model
     if _model is None:
         with _model_lock:
             if _model is None:  # double-checked locking
-                _model = YOLO("yolov8n-pose.pt")
+                from rtmlib import RTMO
+
+                # Downloaded on first use to ~/.cache/rtmlib
+                _model = RTMO(
+                    POSE_MODEL_URLS[POSE_MODEL],
+                    model_input_size=POSE_INPUT_SIZE,
+                    backend=POSE_RUNTIME,
+                    device="cpu",
+                )
     return _model
 
 
@@ -35,26 +46,36 @@ def _resize_for_inference(frame: np.ndarray, width: int = 640) -> np.ndarray:
     return cv2.resize(frame, (width, new_h), interpolation=cv2.INTER_LINEAR)
 
 
+def _detect_people(model, frame: np.ndarray) -> np.ndarray:
+    """
+    Run RTMO and return keypoints as (N_persons, 17, 3) — columns x, y,
+    confidence — in COCO order, the format pose_utils expects.
+    """
+    keypoints, scores = model(frame)  # (N, 17, 2), (N, 17)
+    people = np.concatenate([keypoints, scores[..., None]], axis=-1)
+    # rtmlib returns a single all-zero "person" when nobody is detected
+    return people[scores.max(axis=1) > 0]
+
+
 # ---------------------------------------------------------------------------
 # PoseDetector
 # ---------------------------------------------------------------------------
 
 class PoseDetector:
     """
-    Runs YOLOv8-pose inference in a background thread.
+    Runs RTMO pose inference in a background thread.
 
     Usage
     -----
     detector = PoseDetector()
     detector.submit(frame)          # non-blocking — drop frame if busy
-    players = detector.get_result() # list of person indices with hands raised
+    players = detector.get_result() # list of person indices making the X gesture
     detector.stop()
     """
 
-    def __init__(self, inference_width: int = 640, skip_frames: int = 2, conf: float = 0.5):
+    def __init__(self, inference_width: int = 640, skip_frames: int = 2):
         self._model = _get_model()
         self._inference_width = inference_width
-        self._conf = conf
         self._skip_frames = skip_frames
 
         # Single-slot queue — we only care about the *latest* frame
@@ -76,7 +97,7 @@ class PoseDetector:
     def submit(self, frame: np.ndarray) -> None:
         """
         Send a frame for pose inference.
-        Frames are skipped according to `skip_frames` to reduce CPU/GPU load.
+        Frames are skipped according to `skip_frames` to reduce CPU load.
         If the inference thread is still busy the frame is silently dropped.
         """
         self._frame_counter += 1
@@ -92,7 +113,7 @@ class PoseDetector:
 
     def get_result(self) -> list[int]:
         """
-        Return the list of person indices (0-based) whose both hands are raised.
+        Return the list of person indices (0-based) making the X gesture.
         Non-blocking — returns the last computed result immediately.
         """
         with self._result_lock:
@@ -115,21 +136,9 @@ class PoseDetector:
                 continue
 
             small = _resize_for_inference(frame, self._inference_width)
+            people = _detect_people(self._model, small)
 
-            results = self._model(small, verbose=False, conf=self._conf)
-
-            raised: list[int] = []
-
-            for result in results:
-                if result.keypoints is None:
-                    continue
-
-                # shape: (N_persons, 17, 3)  — columns: x, y, confidence
-                kps_all = result.keypoints.data.cpu().numpy()
-
-                for person_idx, kps in enumerate(kps_all):
-                    if has_arms_crossed_x(kps):
-                        raised.append(person_idx)
+            raised = [idx for idx, kps in enumerate(people) if has_arms_crossed_x(kps)]
 
             with self._result_lock:
                 self._result = raised
